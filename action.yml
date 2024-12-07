@@ -1,0 +1,53 @@
+name: Terraform action
+description: Perform terraform plan and apply action.
+inputs:
+  terraform_version:
+    description: Terraform version to be used in deployment
+    required: true
+  account_setup_directory:
+    description: Directory path where terraform files are present
+    required: true
+  environment:
+    description: Deployment environment
+    required: true
+  tf_vars_file:
+    description: File containing terraform variable values
+    required: true
+  config_file:
+    description: Name of the backend config file
+    required: false
+    default: "backend-config.hcl"
+  action_to_perform:
+    description: Perform plan or apply
+    required: false
+    default: "apply"
+  terraform_parallelism:
+    description: Terraform parallelism value
+    required: false
+    default: "10"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setting up terraform
+      uses: hashicorp/setup-terraform@v3.1.1
+      with:
+        terraform_version: "${{ inputs.terraform_version }}"
+    - name: Running terraform action
+      shell: bash
+      run: |
+        cd "${{ inputs.account_setup_directory }}"
+        terraform init -backend-config="${{ inputs.config_file }}"
+        if terraform workspace list | grep -o "${{ inputs.environment }}"; then
+          terraform workspace select "${{ inputs.environment }}"
+        else
+          terraform workspace new "${{ inputs.environment }}"
+        fi
+        if [ "${{ inputs.action_to_perform }}" = "apply" ]; then
+          terraform apply -auto-approve --var-file="${{ inputs.tf_vars_file }}" -parallelism="${{ inputs.terraform_parallelism }}" -lock=true
+        elif [ "${{ inputs.action_to_perform }}" = "plan" ]; then
+          terraform plan --var-file="${{ inputs.tf_vars_file }}" -parallelism="${{ inputs.terraform_parallelism }}" -lock=true
+        else
+          echo "Invalid action ${{ inputs.action_to_perform }}"
+          exit 1
+        fi
